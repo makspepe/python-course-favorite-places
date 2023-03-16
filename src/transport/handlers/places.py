@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, Query, status
+import geocoder
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi_pagination import Page, paginate
+from geocoder.ipinfo import IpinfoQuery
 
 from exceptions import ApiHTTPException, ObjectNotFoundException
 from models.places import Place
-from schemas.places import PlaceResponse, PlacesListResponse, PlaceUpdate
-from schemas.routes import MetadataTag
+from schemas.places import PlaceResponse, PlaceUpdate
+from schemas.routes import Description, MetadataTag
 from services.places_service import PlacesService
 
 router = APIRouter()
-
 
 tag_places = MetadataTag(
     name="places",
@@ -18,14 +20,14 @@ tag_places = MetadataTag(
 @router.get(
     "",
     summary="Получение списка объектов",
-    response_model=PlacesListResponse,
+    response_model=Page[Place],
 )
 async def get_list(
     limit: int = Query(
         20, gt=0, le=100, description="Ограничение на количество объектов в выборке"
     ),
     places_service: PlacesService = Depends(),
-) -> PlacesListResponse:
+) -> Page[Place]:
     """
     Получение списка любимых мест.
 
@@ -33,8 +35,7 @@ async def get_list(
     :param places_service: Сервис для работы с информацией о любимых местах.
     :return:
     """
-
-    return PlacesListResponse(data=await places_service.get_places_list(limit=limit))
+    return paginate(await places_service.get_places_list(limit=limit))  # type: ignore
 
 
 @router.get(
@@ -127,22 +128,44 @@ async def delete(primary_key: int, places_service: PlacesService = Depends()) ->
 
 
 @router.post(
-    "",
+    "/auto",
     summary="Создание нового объекта с автоматическим определением координат",
     response_model=PlaceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_auto() -> PlaceResponse:
+async def create_auto(
+    request: Request,
+    description: Description,
+    places_service: PlacesService = Depends(),
+) -> PlaceResponse:
     """
     Создание нового объекта любимого места с автоматическим определением координат.
 
     :return:
     """
+    if request.client is None:
+        raise ApiHTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="ip не найден"
+        )
+    ip_info: IpinfoQuery = geocoder.ip(request.client.host)
+    if (
+        ip_info.geojson.get("features", None) is None
+        or len(ip_info.geojson["features"]) == 0
+        or ip_info.geojson["features"][0].get("geometry", None) is None
+    ):
+        raise ApiHTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="ip не найден"
+        )
+    coordinates = ip_info.geojson["features"][0]["geometry"]["coordinates"]
+    place = Place(
+        description=description.description,
+        longitude=coordinates[0],
+        latitude=coordinates[1],
+    )
+    if primary_key := await places_service.create_place(place):
+        return PlaceResponse(data=await places_service.get_place(primary_key))
 
-    # Пример:
-    #
-    # import geocoder
-    # from geocoder.ipinfo import IpinfoQuery
-    #
-    # g: IpinfoQuery = geocoder.ip('me')
-    # print(g.latlng)
+    raise ApiHTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="Объект не был создан",
+    )

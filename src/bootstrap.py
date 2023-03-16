@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi_pagination import add_pagination
 
 from exceptions import setup_exception_handlers
 from routes import metadata_tags, setup_routes
@@ -7,7 +8,6 @@ from settings import settings
 
 def build_app() -> FastAPI:
     """Создание приложения FastAPI."""
-
     app_params = {
         "debug": settings.debug,
         "openapi_tags": metadata_tags,
@@ -19,5 +19,6 @@ def build_app() -> FastAPI:
 
     setup_routes(app)
     setup_exception_handlers(app)
+    add_pagination(app)
 
     return app

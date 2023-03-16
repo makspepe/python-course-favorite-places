@@ -16,6 +16,14 @@ format:
 lint:
 	docker compose run --no-deps --workdir / favorite-places-app /bin/bash -c "pylint src; flake8 src; mypy src; black --check src"
 
+# создание базы данных
+db:
+	docker compose up -d favorite-places-db
+
+# миграции	
+migrate:
+	docker compose run favorite-places-app alembic upgrade head	
+	
 # запуск автоматических тестов
 test:
 	docker compose run favorite-places-app pytest --cov=/src --cov-report html:htmlcov --cov-report term --cov-config=/src/tests/.coveragerc -vv

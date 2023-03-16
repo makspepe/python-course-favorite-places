@@ -46,13 +46,16 @@ class Settings(BaseSettings):
     base_url: str = Field(default="http://0.0.0.0:8010")
     #: строка подключения к БД
     database_url: PostgresDsn = Field(
-        default="postgresql+asyncpg://favorite_places_user:secret@db/favorite_places"
+        default="postgresql+asyncpg://favorite_places_user:secret@favorite-places-db/favorite_places"
+    )
+    database_sync: PostgresDsn = Field(
+        default="postgresql://favorite_places_user:secret@db/favorite_places"
     )
     #: конфигурация RabbitMQ
     rabbitmq: RabbitMQConfig
 
     class Config:
-        env_file = ".env"
+        env_file = ".env", "../.env"
         env_nested_delimiter = "__"
 
 

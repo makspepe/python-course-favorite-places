@@ -8,7 +8,7 @@ from urllib.parse import urlencode, urljoin
 import httpx
 
 from clients.base.base import BaseClient
-from clients.shemas import LocalityDTO
+from clients.schemas import LocalityDTO
 
 
 class LocationClient(BaseClient):
