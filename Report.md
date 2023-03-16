@@ -12,4 +12,4 @@
 
 ### Пагинация
 
-![img](docs/pag.png)
+![img](docs/pag.PNG)
