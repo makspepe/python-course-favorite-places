@@ -26,7 +26,6 @@ class PlacesService:
     def __init__(self, session: AsyncSession = Depends(get_session)):
         """
         Инициализация сервиса.
-
         :param session: Объект сессии для взаимодействия с базой данных
         """
 
@@ -36,7 +35,6 @@ class PlacesService:
     async def get_places_list(self, limit: int) -> list[Place]:
         """
         Получение списка любимых мест.
-
         :param limit: Ограничение на количество элементов в выборке.
         :return:
         """
@@ -46,7 +44,6 @@ class PlacesService:
     async def get_place(self, primary_key: int) -> Optional[Place]:
         """
         Получение объекта любимого места по его идентификатору.
-
         :param primary_key: Идентификатор объекта.
         :return:
         """
@@ -56,11 +53,9 @@ class PlacesService:
     async def create_place(self, place: Place) -> Optional[int]:
         """
         Создание нового объекта любимого места по переданным данным.
-
         :param place: Данные создаваемого объекта.
         :return: Идентификатор созданного объекта.
         """
-
         # обогащение данных путем получения дополнительной информации от API
         if location := await LocationClient().get_location(
             latitude=place.latitude, longitude=place.longitude
@@ -90,17 +85,27 @@ class PlacesService:
 
         return primary_key
 
-    async def update_place(self, primary_key: int, place: PlaceUpdate) -> Optional[int]:
+    async def update_place(
+        self, primary_key: int, place_update: PlaceUpdate
+    ) -> Optional[int]:
         """
         Обновление объекта любимого места по переданным данным.
-
         :param primary_key: Идентификатор объекта.
-        :param place: Данные для обновления объекта.
+        :param place_update: Данные для обновления объекта.
         :return:
         """
-
+        place = Place(
+            latitude=place_update.latitude,
+            longitude=place_update.longitude,
+            description=place_update.description,
+        )
         # при изменении координат – обогащение данных путем получения дополнительной информации от API
-        # todo
+        if location := await LocationClient().get_location(
+            latitude=place_update.latitude, longitude=place_update.longitude
+        ):
+            place.country = location.alpha2code
+            place.city = location.city
+            place.locality = location.locality
 
         matched_rows = await self.places_repository.update_model(
             primary_key, **place.dict(exclude_unset=True)
@@ -109,14 +114,25 @@ class PlacesService:
 
         # публикация события для попытки импорта информации
         # по обновленному объекту любимого места в сервисе Countries Informer
-        # todo
+        try:
+            place_data = CountryCityDTO(
+                city=place.city,
+                alpha2code=place.country,
+            )
+            EventProducer().publish(
+                queue_name=settings.rabbitmq.queue.places_import, body=place_data.json()
+            )
+        except ValidationError:
+            logger.warning(
+                "The message was not well-formed during publishing event.",
+                exc_info=True,
+            )
 
         return matched_rows
 
     async def delete_place(self, primary_key: int) -> Optional[int]:
         """
         Удаление объекта любимого места по его идентификатору.
-
         :param primary_key: Идентификатор объекта.
         :return:
         """
